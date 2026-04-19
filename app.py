@@ -4,16 +4,13 @@ import re
 from collections import Counter
 import matplotlib.pyplot as plt
 
-# 1. Настройка страницы (добавляем иконку)
+# 1. Настройка страницы
 st.set_page_config(page_title="CRM Analytics Pro", layout="wide", page_icon="📊")
 
-# 2. Улучшенные стили (Modern SaaS Look)
+# 2. Стили (Modern SaaS Look)
 st.markdown("""
     <style>
-    /* Общий фон и шрифты */
     .stApp { background-color: #FBFBFA; }
-    
-    /* Стилизация карточки мастера */
     .master-card {
         background-color: #FFFFFF;
         border-radius: 12px;
@@ -21,57 +18,20 @@ st.markdown("""
         margin-bottom: 15px;
         border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        transition: transform 0.2s ease;
     }
-    .master-card:hover {
-        border-color: #007AFF;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-    
-    /* Таблица метрик внутри карточки */
     .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    .stats-label { 
-        color: #6B7280; 
-        font-size: 14px; 
-        padding: 8px 0; 
-        border-bottom: 1px solid #F3F4F6;
-    }
-    .stats-value { 
-        text-align: right; 
-        font-size: 14px; 
-        font-weight: 600; 
-        color: #111827;
-        padding: 8px 0;
-        border-bottom: 1px solid #F3F4F6;
-    }
-    
-    /* Заголовки зон */
+    .stats-label { color: #6B7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F3F4F6; }
+    .stats-value { text-align: right; font-size: 14px; font-weight: 600; color: #111827; padding: 8px 0; border-bottom: 1px solid #F3F4F6; }
     .zone-header {
-        font-size: 18px;
-        font-weight: 700;
-        color: #1F2937;
-        padding: 10px 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        font-size: 18px; font-weight: 700; color: #1F2937; padding: 10px 15px;
+        border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;
     }
     .zone-bad { background-color: #FEF2F2; color: #991B1B; border-left: 4px solid #EF4444; }
     .zone-good { background-color: #F0FDF4; color: #166534; border-left: 4px solid #22C55E; }
-
-    /* Список заказов */
     .order-item {
-        font-size: 13px;
-        padding: 10px;
-        margin: 4px 0;
-        background: #F9FAFB;
-        border-radius: 6px;
-        border: 1px solid #F3F4F6;
-        color: #374151;
+        font-size: 13px; padding: 10px; margin: 4px 0; background: #F9FAFB;
+        border-radius: 6px; border: 1px solid #F3F4F6; color: #374151;
     }
-    
-    /* Кастомный сайдбар */
     [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E5E7EB; }
     </style>
     """, unsafe_allow_html=True)
@@ -81,23 +41,36 @@ def clean_m(v):
     try: return float(c)
     except: return 0.0
 
-# --- САЙДБАР ДЛЯ УПРАВЛЕНИЯ ---
+# --- САЙДБАР ---
 with st.sidebar:
     st.header("⚙️ Управление")
     uploaded_file = st.file_uploader("Загрузить CSV файл", type="csv")
     search_query = st.text_input("🔍 Поиск мастера", "").lower()
-    st.info("Загрузите отчет из CRM для автоматического анализа эффективности.")
+    st.write("---")
+    date_range = st.date_input("📅 Фильтр по дате", value=[], help="Выберите начало и конец периода")
 
 # --- ОСНОВНОЙ КОНТЕНТ ---
 st.title("📊 Аналитика эффективности мастеров")
 
 if uploaded_file:
     try:
-        # Техническая часть без изменений
         df = pd.read_csv(uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
         
+        # Индексы колонок (техническая часть)
+        # Дата — 3-й столбец (индекс 2)
+        date_c = df.columns[2]
         id_c, s_c, n_c, u_c, w_c, x_c = df.columns[0], df.columns[3], df.columns[13], df.columns[20], df.columns[22], df.columns[23]
         
+        # Преобразование даты
+        df[date_c] = pd.to_datetime(df[date_c], dayfirst=True, errors='coerce')
+        
+        # Фильтрация по дате, если выбран диапазон
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            df = df[(df[date_c].dt.date >= start_date) & (df[date_c].dt.date <= end_date)]
+            st.caption(f"✅ Данные отфильтрованы: с {start_date} по {end_date}")
+
+        # Предварительная очистка
         df[u_c] = df[u_c].fillna("Не назначен").astype(str).str.strip()
         df[s_c] = df[s_c].fillna("Прочее").astype(str).str.strip()
         df[x_c] = df[x_c].fillna("Нет причины").astype(str).str.strip()
@@ -133,7 +106,6 @@ if uploaded_file:
                 'money': money, 'fails_grouped': fails_grouped, 'l_price': l_price
             }
 
-        # Отрисовка колонок
         col_left, col_right = st.columns(2, gap="large")
 
         def draw_master_column(masters_data, title, status_class, status_color):
@@ -160,18 +132,10 @@ if uploaded_file:
                         with st.expander(f"🔍 Детализация срывов ({info['fail']})"):
                             total_fails = info['fail']
                             chart_data = {k: len(v) for k, v in info['fails_grouped'].items() if (len(v)/total_fails) >= 0.01}
-                            
                             if chart_data:
-                                # Делаем график более стильным
                                 fig, ax = plt.subplots(figsize=(6, 4))
-                                fig.patch.set_facecolor('#FFFFFF')
-                                wedges, texts, autotexts = ax.pie(
-                                    chart_data.values(), labels=chart_data.keys(), 
-                                    autopct='%1.0f%%', startangle=140, 
-                                    colors=plt.get_cmap('Set3').colors,
-                                    textprops={'fontsize': 9, 'color': '#374151'}
-                                )
-                                plt.setp(autotexts, size=8, weight="bold", color="white")
+                                ax.pie(chart_data.values(), labels=chart_data.keys(), autopct='%1.0f%%', 
+                                       startangle=140, colors=plt.get_cmap('Set3').colors, textprops={'fontsize': 9})
                                 ax.axis('equal')
                                 st.pyplot(fig)
                                 plt.close(fig)
@@ -186,12 +150,10 @@ if uploaded_file:
 
         with col_left:
             draw_master_column(bad_masters, "🔴 Зона риска (< 50%)", "zone-bad", "#EF4444")
-
         with col_right:
             draw_master_column(good_masters, "🟢 Стабильные (≥ 50%)", "zone-good", "#22C55E")
 
     except Exception as e:
-        st.error(f"Произошла ошибка при обработке данных: {e}")
+        st.error(f"Ошибка обработки: {e}")
 else:
-    # Заглушка, если файл не загружен
-    st.info("👈 Пожалуйста, загрузите CSV файл в боковом меню для начала работы.")
+    st.info("👈 Загрузите CSV файл для начала анализа.")
