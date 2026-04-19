@@ -7,11 +7,10 @@ import matplotlib.pyplot as plt
 # Настройка страницы
 st.set_page_config(page_title="Аналитика CRM", layout="wide")
 
-# Улучшенные стили: пастельные подложки и поиск
+# Стили
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF; }
-    /* Карточка мастера с легким пастельным фоном и обводкой */
     .master-card {
         background-color: #F8F9FA; 
         border: 1px solid #E9E9E7; 
@@ -22,8 +21,6 @@ st.markdown("""
     .stats-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     .stats-label { color: #787774; font-size: 13px; padding: 5px 0; }
     .stats-value { text-align: right; font-size: 13px; font-weight: 600; padding: 5px 0; }
-    
-    /* Заголовки колонок */
     .zone-header {
         font-size: 16px;
         font-weight: 700;
@@ -49,9 +46,8 @@ def clean_m(v):
 
 st.title("Сводка по мастерам")
 
-# Блок загрузки и поиска
 uploaded_file = st.file_uploader("Загрузить CSV", type="csv", label_visibility="collapsed")
-search_query = st.text_input("🔍 Поиск по фамилии мастера", "").lower()
+search_query = st.text_input("🔍 Поиск по имени мастера", "").lower()
 
 if uploaded_file:
     try:
@@ -71,7 +67,6 @@ if uploaded_file:
         results = {}
         valid_df = df[~df[u_c].str.contains('не назначен|0|none', case=False)]
         
-        # Фильтрация по поиску
         masters = [m for m in valid_df[u_c].unique() if search_query in m.lower()]
         
         for master in masters:
@@ -115,14 +110,21 @@ if uploaded_file:
                     
                     if info['fail'] > 0:
                         with st.expander(f"📊 Анализ срывов"):
-                            reasons_counts = {k: len(v) for k, v in info['fails_grouped'].items()}
-                            fig, ax = plt.subplots(figsize=(5, 3))
-                            ax.pie(reasons_counts.values(), labels=reasons_counts.keys(), autopct='%1.1f%%', 
-                                   startangle=140, colors=plt.get_cmap('Pastel2').colors, textprops={'fontsize': 8})
-                            ax.axis('equal')
-                            st.pyplot(fig)
-                            plt.close(fig)
+                            # Подготовка данных для диаграммы: фильтруем < 1%
+                            total_fails = info['fail']
+                            chart_data = {k: len(v) for k, v in info['fails_grouped'].items() if (len(v)/total_fails) >= 0.01}
+                            
+                            if chart_data:
+                                fig, ax = plt.subplots(figsize=(5, 3))
+                                ax.pie(chart_data.values(), labels=chart_data.keys(), autopct='%1.1f%%', 
+                                       startangle=140, colors=plt.get_cmap('Pastel2').colors, textprops={'fontsize': 8})
+                                ax.axis('equal')
+                                st.pyplot(fig)
+                                plt.close(fig)
+                            else:
+                                st.info("Нет причин, занимающих более 1% от общего числа срывов.")
 
+                            # Список заказов (здесь показываем ВСЁ без исключений)
                             for reason, orders in info['fails_grouped'].items():
                                 with st.expander(f"{reason} ({len(orders)})"):
                                     for order_text in orders:
