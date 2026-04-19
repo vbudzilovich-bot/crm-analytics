@@ -7,82 +7,34 @@ import matplotlib.pyplot as plt
 # Настройка страницы
 st.set_page_config(page_title="Аналитика CRM", layout="wide")
 
-# Стили (только визуальные правки, логика не тронута)
+# Стили
 st.markdown("""
     <style>
-    :root{
-        --bg:#F6F7F9;
-        --card:#FFFFFF;
-        --muted:#6E6B66;
-        --accent:#0F7B6C;
-        --danger:#EB5757;
-        --border:#E9E9E7;
-    }
-    html, body, [class*="css"]  {
-        background: linear-gradient(180deg, #FBFCFD 0%, var(--bg) 100%) !important;
-        color: #222;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    }
-    .stApp {
-        padding: 18px 20px 30px 20px;
-    }
-    .page-title {
-        display:flex;
-        align-items:center;
-        gap:12px;
-        margin-bottom: 8px;
-    }
-    .page-sub {
-        color:var(--muted);
-        font-size:13px;
-        margin-bottom:16px;
-    }
+    .main { background-color: #FFFFFF; }
     .master-card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 14px;
-        margin-bottom: 14px;
-        box-shadow: 0 6px 18px rgba(16,24,40,0.04);
-        transition: transform .12s ease, box-shadow .12s ease;
+        background-color: #F8F9FA; 
+        border: 1px solid #E9E9E7; 
+        border-radius: 8px; 
+        padding: 18px; 
+        margin-bottom: 20px;
     }
-    .master-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 30px rgba(16,24,40,0.06);
-    }
+    .stats-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    .stats-label { color: #787774; font-size: 13px; padding: 5px 0; }
+    .stats-value { text-align: right; font-size: 13px; font-weight: 600; padding: 5px 0; }
     .zone-header {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 700;
-        color: #222;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px dashed rgba(34,34,34,0.06);
+        color: #37352F;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #F1F1EF;
     }
-    .stats-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    .stats-label { color: var(--muted); font-size: 13px; padding: 6px 0; }
-    .stats-value { text-align: right; font-size: 14px; font-weight: 700; padding: 6px 0; }
     .order-item {
-        font-size: 13px;
+        font-size: 12px;
         padding: 8px;
-        border-radius: 8px;
-        margin-bottom: 6px;
-        border: 1px solid rgba(230,230,230,0.9);
-        color: #222;
-        background: linear-gradient(180deg, #FFFFFF, #FBFCFD);
-    }
-    .small-muted { color: var(--muted); font-size:12px; }
-    .stat-pill {
-        display:inline-block;
-        padding:6px 10px;
-        border-radius:999px;
-        font-weight:700;
-        font-size:13px;
-        color:#fff;
-    }
-    .conv-good { background: linear-gradient(90deg, #0F7B6C, #2ABF9E); }
-    .conv-bad { background: linear-gradient(90deg, #EB5757, #FF8A8A); }
-    @media (max-width: 900px) {
-        .master-card { padding: 12px; }
+        border-bottom: 1px solid #EDEDEB;
+        color: #37352F;
+        background: #FFFFFF;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -92,8 +44,7 @@ def clean_m(v):
     try: return float(c)
     except: return 0.0
 
-st.markdown('<div class="page-title"><h1>📊 Сводка по мастерам</h1></div>', unsafe_allow_html=True)
-st.markdown('<div class="page-sub">Загрузите CSV и получите аналитику по конверсии, выручке и причинам срывов</div>', unsafe_allow_html=True)
+st.title("Сводка по мастерам")
 
 uploaded_file = st.file_uploader("Загрузить CSV", type="csv", label_visibility="collapsed")
 search_query = st.text_input("🔍 Поиск по имени мастера", "").lower()
@@ -148,18 +99,7 @@ if uploaded_file:
                 with st.container():
                     st.markdown(f"""
                     <div class="master-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <b style="font-size:15px; color:#111;">{name.title()}</b>
-                                <div class="small-muted" style="margin-top:6px;">Лидов всего: <b>{info['done'] + info['fail']}</b></div>
-                            </div>
-                            <div style="text-align:right;">
-                                <div class="stat-pill {'conv-good' if info['conv']>=50 else 'conv-bad'}" title="Конверсия">{info['conv']:.0f}%</div>
-                                <div class="small-muted" style="margin-top:6px;">Выручка</div>
-                                <div style="font-weight:700; font-size:15px;">{info['money']:,.0f} ₽</div>
-                            </div>
-                        </div>
-
+                        <b style="font-size: 15px; color: #37352F;">{name.title()}</b>
                         <table class="stats-table">
                             <tr><td class="stats-label">Конверсия</td><td class="stats-value" style="color:{status_color}">{info['conv']:.1f}% ({info['done']}/{info['fail']})</td></tr>
                             <tr><td class="stats-label">Выручка</td><td class="stats-value">{info['money']:,.0f} ₽</td></tr>
@@ -170,6 +110,7 @@ if uploaded_file:
                     
                     if info['fail'] > 0:
                         with st.expander(f"📊 Анализ срывов"):
+                            # Подготовка данных для диаграммы: фильтруем < 1%
                             total_fails = info['fail']
                             chart_data = {k: len(v) for k, v in info['fails_grouped'].items() if (len(v)/total_fails) >= 0.01}
                             
@@ -183,6 +124,7 @@ if uploaded_file:
                             else:
                                 st.info("Нет причин, занимающих более 1% от общего числа срывов.")
 
+                            # Список заказов (здесь показываем ВСЁ без исключений)
                             for reason, orders in info['fails_grouped'].items():
                                 with st.expander(f"{reason} ({len(orders)})"):
                                     for order_text in orders:
@@ -199,5 +141,3 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Ошибка: {e}")
-else:
-    st.info("Загрузите CSV-файл, чтобы увидеть аналитику по мастерам.")
