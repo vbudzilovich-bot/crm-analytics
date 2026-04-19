@@ -56,15 +56,14 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
         
-        # Индексы колонок (техническая часть)
-        # Дата — 3-й столбец (индекс 2)
+        # Индексы колонок
         date_c = df.columns[2]
         id_c, s_c, n_c, u_c, w_c, x_c = df.columns[0], df.columns[3], df.columns[13], df.columns[20], df.columns[22], df.columns[23]
         
         # Преобразование даты
         df[date_c] = pd.to_datetime(df[date_c], dayfirst=True, errors='coerce')
         
-        # Фильтрация по дате, если выбран диапазон
+        # Фильтрация по дате
         if len(date_range) == 2:
             start_date, end_date = date_range
             df = df[(df[date_c].dt.date >= start_date) & (df[date_c].dt.date <= end_date)]
@@ -89,10 +88,15 @@ if uploaded_file:
             total_all = len(m_rows)
             d_c = len(m_rows[m_rows[s_c] == done_st])
             f_c = len(m_rows[m_rows[s_c] == fail_st])
-            if (d_c + f_c) == 0: continue
+            
+            # РАСЧЕТ "В РАБОТЕ"
+            in_progress = total_all - (d_c + f_c)
+            
+            if (d_c + f_c) == 0 and in_progress == 0: continue
             
             money = m_rows[m_rows[s_c] == done_st]['val'].sum()
-            conv = (d_c / (d_c + f_c)) * 100
+            # Конверсия считается только по закрытым (успех/срыв)
+            conv = (d_c / (d_c + f_c)) * 100 if (d_c + f_c) > 0 else 0.0
             l_price = money / total_all if total_all > 0 else 0.0
             
             fails_grouped = {}
@@ -102,8 +106,8 @@ if uploaded_file:
                 fails_grouped[reason].append(f"📄 ID {row[id_c]} — {row[n_c]}")
             
             results[master] = {
-                'done': d_c, 'fail': f_c, 'conv': conv, 
-                'money': money, 'fails_grouped': fails_grouped, 'l_price': l_price
+                'done': d_c, 'fail': f_c, 'progress': in_progress, 
+                'conv': conv, 'money': money, 'fails_grouped': fails_grouped, 'l_price': l_price
             }
 
         col_left, col_right = st.columns(2, gap="large")
@@ -121,7 +125,8 @@ if uploaded_file:
                             </span>
                         </div>
                         <table class="stats-table">
-                            <tr><td class="stats-label">Успешно / Срывы</td><td class="stats-value">{info['done']} / {info['fail']}</td></tr>
+                            <tr><td class="stats-label">Выполнено / Сорвано</td><td class="stats-value">{info['done']} / {info['fail']}</td></tr>
+                            <tr><td class="stats-label">💼 В работе</td><td class="stats-value" style="color: #007AFF;">{info['progress']}</td></tr>
                             <tr><td class="stats-label">Выручка</td><td class="stats-value">{info['money']:,.0f} ₽</td></tr>
                             <tr><td class="stats-label">Цена за лид</td><td class="stats-value">{info['l_price']:,.0f} ₽</td></tr>
                         </table>
