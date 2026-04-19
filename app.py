@@ -51,7 +51,7 @@ st.title("Сводка по мастерам")
 
 # Блок загрузки и поиска
 uploaded_file = st.file_uploader("Загрузить CSV", type="csv", label_visibility="collapsed")
-search_query = st.text_input("🔍 Поиск по имени мастера", "").lower()
+search_query = st.text_input("🔍 Поиск по фамилии мастера", "").lower()
 
 if uploaded_file:
     try:
