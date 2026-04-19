@@ -7,39 +7,37 @@ import matplotlib.pyplot as plt
 # Настройка страницы
 st.set_page_config(page_title="Аналитика CRM", layout="wide")
 
-# Стили: убраны заливки зон и добавлен минималистичный дизайн карточек
+# Улучшенные стили: пастельные подложки и поиск
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF; }
+    /* Карточка мастера с легким пастельным фоном и обводкой */
     .master-card {
-        background: #FFFFFF; 
+        background-color: #F8F9FA; 
         border: 1px solid #E9E9E7; 
-        border-radius: 6px; 
-        padding: 15px; 
+        border-radius: 8px; 
+        padding: 18px; 
         margin-bottom: 20px;
     }
     .stats-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    .stats-label { color: #787774; font-size: 13px; padding: 4px 0; }
-    .stats-value { text-align: right; font-size: 13px; font-weight: 600; padding: 4px 0; }
-    .zone-container { 
-        padding: 10px; 
-        min-height: 100vh;
-        border-left: 1px solid #F1F1EF;
-    }
-    .order-item {
-        font-size: 12px;
-        padding: 6px;
-        border-bottom: 1px solid #F1F1EF;
-        color: #37352F;
-    }
-    /* Заголовок зоны без заливки */
+    .stats-label { color: #787774; font-size: 13px; padding: 5px 0; }
+    .stats-value { text-align: right; font-size: 13px; font-weight: 600; padding: 5px 0; }
+    
+    /* Заголовки колонок */
     .zone-header {
-        font-size: 14px;
-        font-weight: 600;
+        font-size: 16px;
+        font-weight: 700;
         color: #37352F;
         margin-bottom: 20px;
         padding-bottom: 10px;
         border-bottom: 2px solid #F1F1EF;
+    }
+    .order-item {
+        font-size: 12px;
+        padding: 8px;
+        border-bottom: 1px solid #EDEDEB;
+        color: #37352F;
+        background: #FFFFFF;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -51,7 +49,9 @@ def clean_m(v):
 
 st.title("Сводка по мастерам")
 
+# Блок загрузки и поиска
 uploaded_file = st.file_uploader("Загрузить CSV", type="csv", label_visibility="collapsed")
+search_query = st.text_input("🔍 Поиск по имени мастера", "").lower()
 
 if uploaded_file:
     try:
@@ -71,7 +71,10 @@ if uploaded_file:
         results = {}
         valid_df = df[~df[u_c].str.contains('не назначен|0|none', case=False)]
         
-        for master in valid_df[u_c].unique():
+        # Фильтрация по поиску
+        masters = [m for m in valid_df[u_c].unique() if search_query in m.lower()]
+        
+        for master in masters:
             m_rows = valid_df[valid_df[u_c] == master]
             total_all = len(m_rows)
             d_c = len(m_rows[m_rows[s_c] == done_st])
@@ -96,9 +99,9 @@ if uploaded_file:
         col_left, col_right = st.columns(2)
 
         def draw_master_column(masters_data, title, status_color):
-            with st.container():
-                st.markdown(f'<div class="zone-header">{title}</div>', unsafe_allow_html=True)
-                for name, info in masters_data:
+            st.markdown(f'<div class="zone-header">{title}</div>', unsafe_allow_html=True)
+            for name, info in masters_data:
+                with st.container():
                     st.markdown(f"""
                     <div class="master-card">
                         <b style="font-size: 15px; color: #37352F;">{name.title()}</b>
