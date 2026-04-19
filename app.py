@@ -4,38 +4,75 @@ import re
 from collections import Counter
 import matplotlib.pyplot as plt
 
-# Настройка страницы
-st.set_page_config(page_title="Аналитика CRM", layout="wide")
+# 1. Настройка страницы (добавляем иконку)
+st.set_page_config(page_title="CRM Analytics Pro", layout="wide", page_icon="📊")
 
-# Стили
+# 2. Улучшенные стили (Modern SaaS Look)
 st.markdown("""
     <style>
-    .main { background-color: #FFFFFF; }
+    /* Общий фон и шрифты */
+    .stApp { background-color: #FBFBFA; }
+    
+    /* Стилизация карточки мастера */
     .master-card {
-        background-color: #F8F9FA; 
-        border: 1px solid #E9E9E7; 
-        border-radius: 8px; 
-        padding: 18px; 
-        margin-bottom: 20px;
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        border: 1px solid #E0E0E0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        transition: transform 0.2s ease;
     }
-    .stats-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    .stats-label { color: #787774; font-size: 13px; padding: 5px 0; }
-    .stats-value { text-align: right; font-size: 13px; font-weight: 600; padding: 5px 0; }
+    .master-card:hover {
+        border-color: #007AFF;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    
+    /* Таблица метрик внутри карточки */
+    .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .stats-label { 
+        color: #6B7280; 
+        font-size: 14px; 
+        padding: 8px 0; 
+        border-bottom: 1px solid #F3F4F6;
+    }
+    .stats-value { 
+        text-align: right; 
+        font-size: 14px; 
+        font-weight: 600; 
+        color: #111827;
+        padding: 8px 0;
+        border-bottom: 1px solid #F3F4F6;
+    }
+    
+    /* Заголовки зон */
     .zone-header {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 700;
-        color: #37352F;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #F1F1EF;
+        color: #1F2937;
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
+    .zone-bad { background-color: #FEF2F2; color: #991B1B; border-left: 4px solid #EF4444; }
+    .zone-good { background-color: #F0FDF4; color: #166534; border-left: 4px solid #22C55E; }
+
+    /* Список заказов */
     .order-item {
-        font-size: 12px;
-        padding: 8px;
-        border-bottom: 1px solid #EDEDEB;
-        color: #37352F;
-        background: #FFFFFF;
+        font-size: 13px;
+        padding: 10px;
+        margin: 4px 0;
+        background: #F9FAFB;
+        border-radius: 6px;
+        border: 1px solid #F3F4F6;
+        color: #374151;
     }
+    
+    /* Кастомный сайдбар */
+    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E5E7EB; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -44,13 +81,19 @@ def clean_m(v):
     try: return float(c)
     except: return 0.0
 
-st.title("Сводка по мастерам")
+# --- САЙДБАР ДЛЯ УПРАВЛЕНИЯ ---
+with st.sidebar:
+    st.header("⚙️ Управление")
+    uploaded_file = st.file_uploader("Загрузить CSV файл", type="csv")
+    search_query = st.text_input("🔍 Поиск мастера", "").lower()
+    st.info("Загрузите отчет из CRM для автоматического анализа эффективности.")
 
-uploaded_file = st.file_uploader("Загрузить CSV", type="csv", label_visibility="collapsed")
-search_query = st.text_input("🔍 Поиск по имени мастера", "").lower()
+# --- ОСНОВНОЙ КОНТЕНТ ---
+st.title("📊 Аналитика эффективности мастеров")
 
 if uploaded_file:
     try:
+        # Техническая часть без изменений
         df = pd.read_csv(uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
         
         id_c, s_c, n_c, u_c, w_c, x_c = df.columns[0], df.columns[3], df.columns[13], df.columns[20], df.columns[22], df.columns[23]
@@ -66,7 +109,6 @@ if uploaded_file:
 
         results = {}
         valid_df = df[~df[u_c].str.contains('не назначен|0|none', case=False)]
-        
         masters = [m for m in valid_df[u_c].unique() if search_query in m.lower()]
         
         for master in masters:
@@ -84,24 +126,30 @@ if uploaded_file:
             for _, row in m_rows[m_rows[s_c] == fail_st].iterrows():
                 reason = row[x_c]
                 if reason not in fails_grouped: fails_grouped[reason] = []
-                fails_grouped[reason].append(f"📄 {row[id_c]} — {row[n_c]}")
+                fails_grouped[reason].append(f"📄 ID {row[id_c]} — {row[n_c]}")
             
             results[master] = {
                 'done': d_c, 'fail': f_c, 'conv': conv, 
                 'money': money, 'fails_grouped': fails_grouped, 'l_price': l_price
             }
 
-        col_left, col_right = st.columns(2)
+        # Отрисовка колонок
+        col_left, col_right = st.columns(2, gap="large")
 
-        def draw_master_column(masters_data, title, status_color):
-            st.markdown(f'<div class="zone-header">{title}</div>', unsafe_allow_html=True)
+        def draw_master_column(masters_data, title, status_class, status_color):
+            st.markdown(f'<div class="zone-header {status_class}">{title}</div>', unsafe_allow_html=True)
             for name, info in masters_data:
                 with st.container():
                     st.markdown(f"""
                     <div class="master-card">
-                        <b style="font-size: 15px; color: #37352F;">{name.title()}</b>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 16px; font-weight: 700; color: #111827;">{name.title()}</span>
+                            <span style="background: {status_color}22; color: {status_color}; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 700;">
+                                {info['conv']:.1f}%
+                            </span>
+                        </div>
                         <table class="stats-table">
-                            <tr><td class="stats-label">Конверсия</td><td class="stats-value" style="color:{status_color}">{info['conv']:.1f}% ({info['done']}/{info['fail']})</td></tr>
+                            <tr><td class="stats-label">Успешно / Срывы</td><td class="stats-value">{info['done']} / {info['fail']}</td></tr>
                             <tr><td class="stats-label">Выручка</td><td class="stats-value">{info['money']:,.0f} ₽</td></tr>
                             <tr><td class="stats-label">Цена за лид</td><td class="stats-value">{info['l_price']:,.0f} ₽</td></tr>
                         </table>
@@ -109,35 +157,41 @@ if uploaded_file:
                     """, unsafe_allow_html=True)
                     
                     if info['fail'] > 0:
-                        with st.expander(f"📊 Анализ срывов"):
-                            # Подготовка данных для диаграммы: фильтруем < 1%
+                        with st.expander(f"🔍 Детализация срывов ({info['fail']})"):
                             total_fails = info['fail']
                             chart_data = {k: len(v) for k, v in info['fails_grouped'].items() if (len(v)/total_fails) >= 0.01}
                             
                             if chart_data:
-                                fig, ax = plt.subplots(figsize=(5, 3))
-                                ax.pie(chart_data.values(), labels=chart_data.keys(), autopct='%1.1f%%', 
-                                       startangle=140, colors=plt.get_cmap('Pastel2').colors, textprops={'fontsize': 8})
+                                # Делаем график более стильным
+                                fig, ax = plt.subplots(figsize=(6, 4))
+                                fig.patch.set_facecolor('#FFFFFF')
+                                wedges, texts, autotexts = ax.pie(
+                                    chart_data.values(), labels=chart_data.keys(), 
+                                    autopct='%1.0f%%', startangle=140, 
+                                    colors=plt.get_cmap('Set3').colors,
+                                    textprops={'fontsize': 9, 'color': '#374151'}
+                                )
+                                plt.setp(autotexts, size=8, weight="bold", color="white")
                                 ax.axis('equal')
                                 st.pyplot(fig)
                                 plt.close(fig)
-                            else:
-                                st.info("Нет причин, занимающих более 1% от общего числа срывов.")
 
-                            # Список заказов (здесь показываем ВСЁ без исключений)
                             for reason, orders in info['fails_grouped'].items():
-                                with st.expander(f"{reason} ({len(orders)})"):
+                                with st.expander(f"📌 {reason} — {len(orders)}"):
                                     for order_text in orders:
                                         st.markdown(f'<div class="order-item">{order_text}</div>', unsafe_allow_html=True)
 
         bad_masters = sorted([(n, i) for n, i in results.items() if i['conv'] < 50], key=lambda x: x[1]['conv'])
-        good_masters = sorted([(n, i) for n, i in results.items() if i['conv'] >= 50], key=lambda x: x[1]['conv'])
+        good_masters = sorted([(n, i) for n, i in results.items() if i['conv'] >= 50], key=lambda x: x[1]['conv'], reverse=True)
 
         with col_left:
-            draw_master_column(bad_masters, "🔴 Зона риска (< 50%)", "#EB5757")
+            draw_master_column(bad_masters, "🔴 Зона риска (< 50%)", "zone-bad", "#EF4444")
 
         with col_right:
-            draw_master_column(good_masters, "🟢 Стабильные (≥ 50%)", "#0F7B6C")
+            draw_master_column(good_masters, "🟢 Стабильные (≥ 50%)", "zone-good", "#22C55E")
 
     except Exception as e:
-        st.error(f"Ошибка: {e}")
+        st.error(f"Произошла ошибка при обработке данных: {e}")
+else:
+    # Заглушка, если файл не загружен
+    st.info("👈 Пожалуйста, загрузите CSV файл в боковом меню для начала работы.")
