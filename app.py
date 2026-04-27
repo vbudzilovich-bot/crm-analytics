@@ -54,7 +54,8 @@ def clean_m(v):
 # --- САЙДБАР ---
 with st.sidebar:
     st.header("⚙️ Управление")
-    uploaded_file = st.file_uploader("Загрузить CSV файл", type="csv")
+    # ТЗ 2.1: Активирована мультизагрузка
+    uploaded_files = st.file_uploader("Загрузите один или несколько CSV файлов", type="csv", accept_multiple_files=True)
     search_query = st.text_input("🔍 Поиск мастера", "").lower()
     st.write("---")
     date_range = st.date_input("📅 Фильтр по дате", value=[], help="Выберите начало и конец периода")
@@ -62,9 +63,21 @@ with st.sidebar:
 # --- ОСНОВНОЙ КОНТЕНТ ---
 st.title("📊 Аналитика эффективности мастеров")
 
-if uploaded_file:
+if uploaded_files:
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
+        # ТЗ 2.2: Логика консолидации данных
+        all_dfs = []
+        for file in uploaded_files:
+            temp_df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
+            all_dfs.append(temp_df)
+        
+        # Объединяем в один массив
+        df = pd.concat(all_dfs, ignore_index=True)
+        
+        # ТЗ 2.3: Удаление дубликатов по ID заказа (столбец 0)
+        df = df.drop_duplicates(subset=[df.columns[0]], keep='last')
+        
+        # --- ДАЛЕЕ СТАНДАРТНАЯ ЛОГИКА РАСЧЕТОВ ---
         
         # Индексы колонок
         date_c = df.columns[2]         # Дата создания
@@ -78,7 +91,7 @@ if uploaded_file:
         df[date_c] = pd.to_datetime(df[date_c], dayfirst=True, errors='coerce', format='mixed')
         df[closed_date_c] = pd.to_datetime(df[closed_date_c], dayfirst=True, errors='coerce', format='mixed')
         
-        # Предварительная очистка всего датасета
+        # Предварительная очистка
         df[u_c] = df[u_c].fillna("Не назначен").astype(str).str.strip()
         df[s_c] = df[s_c].fillna("Прочее").astype(str).str.strip()
         df[x_c] = df[x_c].fillna("Нет причины").astype(str).str.strip()
@@ -88,7 +101,7 @@ if uploaded_file:
         done_st = next((c for c in df[s_c].unique() if 'выполнен' in str(c).lower()), "Заказ выполнен")
         fail_st = next((c for c in df[s_c].unique() if 'сорван' in str(c).lower()), "Заказ сорван")
 
-        # 2. Разделяем логику фильтрации по датам
+        # Фильтрация по датам
         df_created = df.copy()
         df_closed = df[df[closed_date_c].notna()].copy()
         
@@ -97,24 +110,21 @@ if uploaded_file:
             df_created = df[(df[date_c].dt.date >= start_date) & (df[date_c].dt.date <= end_date)]
             df_closed = df[(df[closed_date_c].dt.date >= start_date) & (df[closed_date_c].dt.date <= end_date)]
 
-        # Отсекаем пустых мастеров
+        # Мастера
         valid_created = df_created[~df_created[u_c].str.contains('не назначен|0|none', case=False)]
         valid_closed = df_closed[~df_closed[u_c].str.contains('не назначен|0|none', case=False)]
         
-        # Собираем уникальных мастеров из ОБЕИХ таблиц
         all_unique_masters = set(valid_created[u_c].unique()).union(set(valid_closed[u_c].unique()))
         masters = [m for m in all_unique_masters if search_query in m.lower()]
         
-        # Инициализируем общие переменные перед циклом
+        # ТЗ 3: Синхронизированные счетчики
         total_revenue_all = 0.0
         total_closed_all = 0.0
 
         results = {}
 
         for master in masters:
-            # Заказы, СОЗДАННЫЕ в выбранный период
             m_rows = valid_created[valid_created[u_c] == master]
-            # Заказы, ЗАКРЫТЫЕ в выбранный период
             m_closed_rows = valid_closed[valid_closed[u_c] == master]
             
             total_all = len(m_rows)
@@ -122,16 +132,12 @@ if uploaded_file:
             f_c = len(m_rows[m_rows[s_c] == fail_st])
             in_progress = total_all - (d_c + f_c)
             
-            # Выручка по созданным заказам
             money = m_rows[m_rows[s_c] == done_st]['val'].sum()
-            # Выручка по закрытым заказам
             closed_money = m_closed_rows['val'].sum()
             
-            # Если у мастера нет ни новых заказов, ни закрытых в этом периоде — пропускаем его
             if total_all == 0 and closed_money == 0: 
                 continue
                 
-            # Добавляем суммы к общим счетчикам ТОЛЬКО для активных и отфильтрованных мастеров
             total_revenue_all += money
             total_closed_all += closed_money
             
@@ -150,7 +156,7 @@ if uploaded_file:
                 'fails_grouped': fails_grouped, 'l_price': l_price
             }
 
-        # 3. Суммарная выручка вверху (Двойная карточка)
+        # Вывод показателей в шапке
         st.markdown(f"""
             <div class="total-revenue-card" style="display: flex; justify-content: space-around; align-items: center; padding: 15px 0;">
                 <div style="flex: 1; border-right: 1px solid rgba(255,255,255,0.2);">
@@ -165,7 +171,7 @@ if uploaded_file:
         """, unsafe_allow_html=True)
 
         if not results:
-            st.info("Мастера по вашему запросу или за выбранный период не найдены.")
+            st.info("Мастера не найдены.")
         else:
             col_left, col_right = st.columns(2, gap="large")
 
@@ -216,6 +222,6 @@ if uploaded_file:
                 draw_master_column(good_masters, "🟢 Стабильные (≥ 50%)", "zone-good", "#22C55E")
 
     except Exception as e:
-        st.error(f"Ошибка обработки: {e}")
+        st.error(f"Ошибка обработки файлов: {e}")
 else:
-    st.info("👈 Загрузите CSV файл для начала анализа.")
+    st.info("👈 Загрузите один или несколько CSV файлов для анализа.")
