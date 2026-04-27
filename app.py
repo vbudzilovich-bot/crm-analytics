@@ -66,40 +66,53 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8-sig')
         
-        # Индексы колонок (Добавлен m_c для столбца M - индекс 12)
-        date_c = df.columns[2]
-        id_c, s_c, n_c, u_c, w_c, x_c, m_c = (
+        # Индексы колонок
+        date_c = df.columns[2]   # Дата создания
+        closed_date_c = df.columns[12] # Столбец M (Дата закрытия)
+        id_c, s_c, n_c, u_c, w_c, x_c = (
             df.columns[0], df.columns[3], df.columns[13], 
-            df.columns[20], df.columns[22], df.columns[23], df.columns[12]
+            df.columns[20], df.columns[22], df.columns[23]
         )
         
-        # 1. Исправление дат
+        # Переводим даты в формат datetime
         df[date_c] = pd.to_datetime(df[date_c], dayfirst=True, errors='coerce', format='mixed')
+        df[closed_date_c] = pd.to_datetime(df[closed_date_c], dayfirst=True, errors='coerce', format='mixed')
         
-        # Фильтрация по дате
+        # 1. Фильтрация ОСНОВНОГО датафрейма по дате создания (для общей аналитики)
+        df_filtered = df.copy()
         if len(date_range) == 2:
             start_date, end_date = date_range
-            df = df[(df[date_c].dt.date >= start_date) & (df[date_c].dt.date <= end_date)]
+            df_filtered = df[(df[date_c].dt.date >= start_date) & (df[date_c].dt.date <= end_date)]
 
-        if df.empty:
+        if df_filtered.empty and not df.empty:
             st.warning("⚠️ За выбранный период данных не найдено.")
         else:
-            # Предварительная очистка
-            df[u_c] = df[u_c].fillna("Не назначен").astype(str).str.strip()
-            df[s_c] = df[s_c].fillna("Прочее").astype(str).str.strip()
-            df[x_c] = df[x_c].fillna("Нет причины").astype(str).str.strip()
-            df[n_c] = df[n_c].fillna("-").astype(str).str.strip()
-            df['val'] = df[w_c].apply(clean_m)
+            # Очистка данных
+            df_filtered[u_c] = df_filtered[u_c].fillna("Не назначен").astype(str).str.strip()
+            df_filtered[s_c] = df_filtered[s_c].fillna("Прочее").astype(str).str.strip()
+            df_filtered[x_c] = df_filtered[x_c].fillna("Нет причины").astype(str).str.strip()
+            df_filtered[n_c] = df_filtered[n_c].fillna("-").astype(str).str.strip()
+            df_filtered['val'] = df_filtered[w_c].apply(clean_m)
             
-            done_st = next((c for c in df[s_c].unique() if 'выполнен' in str(c).lower()), "Заказ выполнен")
-            fail_st = next((c for c in df[s_c].unique() if 'сорван' in str(c).lower()), "Заказ сорван")
+            done_st = next((c for c in df_filtered[s_c].unique() if 'выполнен' in str(c).lower()), "Заказ выполнен")
+            fail_st = next((c for c in df_filtered[s_c].unique() if 'сорван' in str(c).lower()), "Заказ сорван")
+
+            # 2. Логика для "Дохода по дате закрытия" (Столбец M в рамках периода)
+            # Берем исходный df и фильтруем его по дате ЗАКРЫТИЯ
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+                df_closed_in_period = df[(df[closed_date_c].dt.date >= start_date) & (df[closed_date_c].dt.date <= end_date)]
+            else:
+                df_closed_in_period = df[df[closed_date_c].notna()]
+            
+            # Сумма из столбца W для тех, кто закрылся в период
+            total_closed_all = df_closed_in_period[w_c].apply(clean_m).sum()
 
             results = {}
-            valid_df = df[~df[u_c].str.contains('не назначен|0|none', case=False)]
+            valid_df = df_filtered[~df_filtered[u_c].str.contains('не назначен|0|none', case=False)]
             masters = [m for m in valid_df[u_c].unique() if search_query in m.lower()]
             
             total_revenue_all = 0.0
-            total_closed_all = 0.0
 
             for master in masters:
                 m_rows = valid_df[valid_df[u_c] == master]
@@ -110,13 +123,12 @@ if uploaded_file:
                 
                 if (d_c + f_c) == 0 and in_progress == 0: continue
                 
-                # Выручка из столбца W
                 money = m_rows[m_rows[s_c] == done_st]['val'].sum()
-                # Доход из столбца M (Дата закрытия)
-                closed_money = m_rows[m_c].apply(clean_m).sum()
-                
                 total_revenue_all += money
-                total_closed_all += closed_money
+                
+                # Доход конкретного мастера по дате закрытия в этом периоде
+                m_closed_rows = df_closed_in_period[df_closed_in_period[u_c].astype(str).str.strip() == master]
+                m_closed_money = m_closed_rows[w_c].apply(clean_m).sum()
                 
                 conv = (d_c / (d_c + f_c)) * 100 if (d_c + f_c) > 0 else 0.0
                 l_price = money / total_all if total_all > 0 else 0.0
@@ -129,19 +141,19 @@ if uploaded_file:
                 
                 results[master] = {
                     'done': d_c, 'fail': f_c, 'progress': in_progress, 
-                    'conv': conv, 'money': money, 'closed_money': closed_money,
+                    'conv': conv, 'money': money, 'closed_money': m_closed_money,
                     'fails_grouped': fails_grouped, 'l_price': l_price
                 }
 
-            # 3. Суммарная выручка вверху (Двойная карточка)
+            # 3. Суммарная выручка вверху
             st.markdown(f"""
                 <div class="total-revenue-card" style="display: flex; justify-content: space-around; align-items: center; padding: 15px 0;">
                     <div style="flex: 1; border-right: 1px solid rgba(255,255,255,0.2);">
-                        <div style="font-size: 14px; opacity: 0.8; margin-bottom: 5px;">Доход (по дате закр.)</div>
+                        <div style="font-size: 14px; opacity: 0.8; margin-bottom: 5px;">Доход (закрыто в периоде)</div>
                         <div style="font-size: 28px; font-weight: 800;">{total_closed_all:,.0f} ₽</div>
                     </div>
                     <div style="flex: 1;">
-                        <div style="font-size: 14px; opacity: 0.8; margin-bottom: 5px;">Общая выручка за период</div>
+                        <div style="font-size: 14px; opacity: 0.8; margin-bottom: 5px;">Выручка (создано в периоде)</div>
                         <div style="font-size: 28px; font-weight: 800;">{total_revenue_all:,.0f} ₽</div>
                     </div>
                 </div>
@@ -167,8 +179,8 @@ if uploaded_file:
                                 <table class="stats-table">
                                     <tr><td class="stats-label">Выполнено / Сорвано</td><td class="stats-value">{info['done']} / {info['fail']}</td></tr>
                                     <tr><td class="stats-label">💼 В работе</td><td class="stats-value" style="color: #007AFF;">{info['progress']}</td></tr>
-                                    <tr><td class="stats-label">Выручка (факт)</td><td class="stats-value">{info['money']:,.0f} ₽</td></tr>
-                                    <tr><td class="stats-label">Доход (дата закр.)</td><td class="stats-value" style="font-weight:700;">{info['closed_money']:,.0f} ₽</td></tr>
+                                    <tr><td class="stats-label">Выручка (по созд.)</td><td class="stats-value">{info['money']:,.0f} ₽</td></tr>
+                                    <tr><td class="stats-label">Доход (по закр.)</td><td class="stats-value" style="font-weight:700;">{info['closed_money']:,.0f} ₽</td></tr>
                                     <tr><td class="stats-label">Цена за лид</td><td class="stats-value">{info['l_price']:,.0f} ₽</td></tr>
                                 </table>
                             </div>
