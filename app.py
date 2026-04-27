@@ -101,13 +101,13 @@ if uploaded_file:
         valid_created = df_created[~df_created[u_c].str.contains('не назначен|0|none', case=False)]
         valid_closed = df_closed[~df_closed[u_c].str.contains('не назначен|0|none', case=False)]
         
-        # Собираем уникальных мастеров из ОБЕИХ таблиц (чтобы не потерять тех, кто только закрывал заказы)
+        # Собираем уникальных мастеров из ОБЕИХ таблиц
         all_unique_masters = set(valid_created[u_c].unique()).union(set(valid_closed[u_c].unique()))
         masters = [m for m in all_unique_masters if search_query in m.lower()]
         
-        # Итоговые общие переменные
+        # Инициализируем общие переменные перед циклом
         total_revenue_all = 0.0
-        total_closed_all = valid_closed['val'].sum() # Считает доход только за закрытые в этот период
+        total_closed_all = 0.0
 
         results = {}
 
@@ -131,7 +131,9 @@ if uploaded_file:
             if total_all == 0 and closed_money == 0: 
                 continue
                 
+            # Добавляем суммы к общим счетчикам ТОЛЬКО для активных и отфильтрованных мастеров
             total_revenue_all += money
+            total_closed_all += closed_money
             
             conv = (d_c / (d_c + f_c)) * 100 if (d_c + f_c) > 0 else 0.0
             l_price = money / total_all if total_all > 0 else 0.0
